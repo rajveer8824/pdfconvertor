@@ -10,17 +10,17 @@ import PDFParser from 'pdf2json';
 import { fileURLToPath } from 'url';
 import { PDFDocument } from 'pdf-lib';
 
-// Adobe PDF Services SDK imports
+// Adobe PDF Services SDK imports - Make sure these are correct
 import {
   PDFServices,
   MimeType,
   ExportPDFJob,
   ExportPDFParams,
   ExportPDFTargetFormat,
-  ExportPDFResult,
+  ExportPDFResult,        // This is the correct result type for PDF export
   CompressPDFJob,
   CompressPDFParams,
-  CompressPDFResult,
+  CompressPDFResult,      // This is the correct result type for PDF compression
   CompressionLevel,
   SDKError,
   ServicePrincipalCredentials,
@@ -310,15 +310,15 @@ async function convertPdfToWordAdobe(inputPath, outputPath) {
       return false;
     }
 
-    // Create PDF Services instance with enhanced configuration
+    // Create PDF Services instance
     const pdfServices = new PDFServices({ 
       credentials,
-      region: 'US' // or 'EU' based on your preference
+      region: 'US'
     });
 
     console.log("📄 Uploading PDF file to Adobe...");
     
-    // Create asset from file with proper MIME type
+    // Create asset from file
     const inputAsset = await pdfServices.upload({
       readStream: fs.createReadStream(inputPath),
       mimeType: MimeType.PDF
@@ -326,11 +326,10 @@ async function convertPdfToWordAdobe(inputPath, outputPath) {
 
     console.log("⚙️ Configuring conversion parameters...");
     
-    // Create enhanced parameters for maximum quality conversion
+    // Create parameters for DOCX export
     const params = new ExportPDFParams({
       targetFormat: ExportPDFTargetFormat.DOCX,
-      // Additional options for better conversion quality
-      ocrLang: 'en-US' // Enable OCR for scanned PDFs
+      ocrLang: 'en-US'
     });
 
     console.log("🔄 Creating conversion job...");
@@ -343,16 +342,16 @@ async function convertPdfToWordAdobe(inputPath, outputPath) {
 
     console.log("📤 Submitting job to Adobe PDF Services...");
     
-    // Submit the job and get polling URL
+    // Submit the job
     const pollingURL = await pdfServices.submit({ job });
     
     console.log("⏳ Waiting for conversion to complete...");
     console.log(`📊 Polling URL: ${pollingURL}`);
 
-    // Poll for completion with correct result type
+    // Poll for completion with CORRECT result type
     const pdfServicesResponse = await pdfServices.getJobResult({
       pollingURL,
-      resultType: ExportPDFResult
+      resultType: ExportPDFResult  // This is the correct result type for ExportPDF jobs
     });
 
     console.log("✅ Conversion completed successfully!");
@@ -362,7 +361,7 @@ async function convertPdfToWordAdobe(inputPath, outputPath) {
     const resultAsset = pdfServicesResponse.result.asset;
     const streamAsset = await pdfServices.getContent({ asset: resultAsset });
 
-    // Save to output file with proper error handling
+    // Save to output file
     const outputStream = fs.createWriteStream(outputPath);
     streamAsset.readStream.pipe(outputStream);
 
