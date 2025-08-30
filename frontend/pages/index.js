@@ -4,6 +4,44 @@ import toast, { Toaster } from 'react-hot-toast';
 // Use environment variable for API URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pdftoword-convertore.onrender.com';
 
+// Enhanced fetch with better error handling and CORS
+const fetchWithRetry = async (url, options = {}, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`🔄 Attempt ${i + 1} - Fetching:`, url);
+      
+      const response = await fetch(url, {
+        ...options,
+        mode: 'cors',
+        credentials: 'omit', // Remove credentials for CORS
+        headers: {
+          'Accept': 'application/json',
+          ...options.headers,
+        },
+      });
+      
+      console.log(`✅ Response status: ${response.status}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error(`❌ Attempt ${i + 1} failed:`, error.message);
+      
+      if (i === retries - 1) {
+        throw new Error(`Network request failed after ${retries} attempts: ${error.message}`);
+      }
+      
+      // Wait before retry with exponential backoff
+      const delay = Math.min(1000 * Math.pow(2, i), 10000);
+      console.log(`⏳ Waiting ${delay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
 export default function Home() {
   const [file, setFile] = useState(null);
   const [type, setType] = useState('pdf-to-word');
@@ -126,6 +164,12 @@ export default function Home() {
       return;
     }
 
+    // Check if backend is connected first
+    if (backendStatus !== 'connected') {
+      toast.error('Backend is not connected. Please wait for connection.');
+      return;
+    }
+
     setLoading(true);
     setResult(null);
     
@@ -137,23 +181,39 @@ export default function Home() {
     const loadingToast = toast.loading('Converting your file...');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/convert`, {
+      console.log('🚀 Starting file upload...');
+      console.log('📁 File:', file.name, 'Size:', file.size);
+      console.log('🔧 Type:', type, 'Compression:', compressionLevel);
+      
+      const response = await fetchWithRetry(`${API_BASE_URL}/api/convert`, {
         method: 'POST',
         body: formData,
+        // Don't set Content-Type header - let browser set it for FormData
       });
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
       const data = await response.json();
+      console.log('✅ Conversion response:', data);
+      
       setResult(data);
       toast.success('Conversion completed successfully!', { id: loadingToast });
       
     } catch (error) {
       console.error('❌ Upload failed:', error);
-      setResult({ error: `Upload failed: ${error.message}` });
-      toast.error(`Conversion failed: ${error.message}`, { id: loadingToast });
+      
+      let errorMessage = 'Conversion failed';
+      
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Cannot reach server. Please check if the backend is running.';
+      } else if (error.message.includes('NetworkError')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.message.includes('CORS')) {
+        errorMessage = 'Cross-origin request blocked. Please contact support.';
+      } else {
+        errorMessage = error.message;
+      }
+      
+      setResult({ error: errorMessage });
+      toast.error(errorMessage, { id: loadingToast });
     } finally {
       setLoading(false);
     }
@@ -161,8 +221,11 @@ export default function Home() {
 
   const downloadFile = async (filename) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/download/${filename}`);
-      if (!response.ok) throw new Error('Download failed');
+      console.log('📥 Downloading:', filename);
+      
+      const response = await fetchWithRetry(`${API_BASE_URL}/api/download/${filename}`, {
+        method: 'GET',
+      });
       
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -175,30 +238,86 @@ export default function Home() {
       document.body.removeChild(a);
       toast.success('File downloaded successfully!');
     } catch (error) {
-      toast.error('Download failed');
+      console.error('❌ Download failed:', error);
+      toast.error('Download failed. Please try again.');
     }
   };
 
   useEffect(() => {
-    // Check backend connection on load
+    // Enhanced backend connection check
     const checkBackend = async () => {
+      setBackendStatus('checking');
+      
       try {
-        const response = await fetch(`${API_BASE_URL}/health`);
+        console.log('🔍 Checking backend health...');
+        
+        // First try a simple GET request
+        const response = await fetch(`${API_BASE_URL}/health`, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        
         if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Backend healthy:', data);
           setBackendStatus('connected');
-          toast.success('Connected to backend successfully!');
+          toast.success('Backend connected successfully!');
         } else {
-          setBackendStatus('error');
-          toast.error('Backend connection failed');
+          throw new Error(`Backend returned ${response.status}`);
         }
       } catch (error) {
+        console.error('❌ Backend check failed:', error);
         setBackendStatus('error');
-        toast.error('Cannot connect to backend');
+        
+        if (error.message.includes('Failed to fetch')) {
+          toast.error('Backend server is not responding. It may be starting up...');
+        } else {
+          toast.error(`Backend connection failed: ${error.message}`);
+        }
       }
     };
     
+    // Initial check
     checkBackend();
-  }, []);
+    
+    // Retry every 15 seconds if failed
+    const interval = setInterval(() => {
+      if (backendStatus === 'error') {
+        console.log('🔄 Retrying backend connection...');
+        checkBackend();
+      }
+    }, 15000);
+    
+    return () => clearInterval(interval);
+  }, [backendStatus]);
+
+  // Add test connection function
+  const testConnection = async () => {
+    try {
+      toast.loading('Testing connection...');
+      
+      const response = await fetch(`${API_BASE_URL}/api/test`, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Connection test successful!');
+        console.log('✅ Test response:', data);
+      } else {
+        toast.error(`Test failed: ${response.status}`);
+      }
+    } catch (error) {
+      toast.error(`Test failed: ${error.message}`);
+      console.error('❌ Test failed:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-all duration-500">
@@ -468,10 +587,42 @@ export default function Home() {
   );
 }
 
-
-
-
-
+// Add connection status and test button in the UI
+<div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center space-x-3">
+      <div className={`w-3 h-3 rounded-full ${
+        backendStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
+        backendStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'
+      }`}></div>
+      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+        Backend: {
+          backendStatus === 'connected' ? 'Connected ✅' : 
+          backendStatus === 'error' ? 'Disconnected ❌' : 'Connecting... ⏳'
+        }
+      </span>
+    </div>
+    
+    <div className="flex space-x-2">
+      <button
+        onClick={testConnection}
+        className="px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+      >
+        Test
+      </button>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-3 py-1 text-xs bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+      >
+        Refresh
+      </button>
+    </div>
+  </div>
+  
+  <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+    Server: {API_BASE_URL}
+  </div>
+</div>
 
 
 
