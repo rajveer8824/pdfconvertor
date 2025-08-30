@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 
+// Use environment variable for API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pdftoword-convertore.onrender.com';
+
 export default function Home() {
   const [file, setFile] = useState(null);
   const [type, setType] = useState('pdf-to-word');
@@ -8,6 +11,8 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [compressionLevel, setCompressionLevel] = useState('medium');
+  const [backendStatus, setBackendStatus] = useState('checking');
 
   useEffect(() => {
     const saved = localStorage.getItem('darkMode');
@@ -127,11 +132,12 @@ export default function Home() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', type);
+    formData.append('compressionLevel', compressionLevel);
 
     const loadingToast = toast.loading('Converting your file...');
 
     try {
-      const response = await fetch('http://localhost:3001/api/convert', {
+      const response = await fetch(`${API_BASE_URL}/api/convert`, {
         method: 'POST',
         body: formData,
       });
@@ -155,7 +161,7 @@ export default function Home() {
 
   const downloadFile = async (filename) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/download/${filename}`);
+      const response = await fetch(`${API_BASE_URL}/api/download/${filename}`);
       if (!response.ok) throw new Error('Download failed');
       
       const blob = await response.blob();
@@ -172,6 +178,27 @@ export default function Home() {
       toast.error('Download failed');
     }
   };
+
+  useEffect(() => {
+    // Check backend connection on load
+    const checkBackend = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/health`);
+        if (response.ok) {
+          setBackendStatus('connected');
+          toast.success('Connected to backend successfully!');
+        } else {
+          setBackendStatus('error');
+          toast.error('Backend connection failed');
+        }
+      } catch (error) {
+        setBackendStatus('error');
+        toast.error('Cannot connect to backend');
+      }
+    };
+    
+    checkBackend();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-all duration-500">
@@ -193,6 +220,17 @@ export default function Home() {
               </div>
             </div>
             
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${
+                backendStatus === 'connected' ? 'bg-green-500' : 
+                backendStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500'
+              }`}></div>
+              <span className="text-xs text-gray-500">
+                {backendStatus === 'connected' ? 'Online' : 
+                 backendStatus === 'error' ? 'Offline' : 'Connecting...'}
+              </span>
+            </div>
+
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="p-3 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-black/10 dark:hover:bg-black/20 transition-all duration-200 backdrop-blur-sm border border-white/20"
@@ -239,6 +277,43 @@ export default function Home() {
             ))}
           </div>
         </div>
+
+        {(type === 'compress-image' || type === 'compress-video' || type === 'compress-pdf') && (
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">
+              Choose Compression Level
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {['low', 'medium', 'high'].map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setCompressionLevel(level)}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                    compressionLevel === level
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                  }`}
+                >
+                  <div className="text-center">
+                    <div className="text-lg mb-1">
+                      {level === 'low' && '🗜️'}
+                      {level === 'medium' && '⚖️'}
+                      {level === 'high' && '✨'}
+                    </div>
+                    <h4 className="font-medium capitalize text-gray-800 dark:text-gray-200">
+                      {level} Quality
+                    </h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {level === 'low' && 'Smallest file size'}
+                      {level === 'medium' && 'Balanced quality & size'}
+                      {level === 'high' && 'Best quality'}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* File Upload */}
         <div className="grid lg:grid-cols-2 gap-8">
@@ -392,6 +467,10 @@ export default function Home() {
     </div>
   );
 }
+
+
+
+
 
 
 

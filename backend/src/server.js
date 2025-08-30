@@ -9,6 +9,7 @@ import ffmpegPath from 'ffmpeg-static';
 import PDFParser from 'pdf2json';
 import { fileURLToPath } from 'url';
 import { PDFDocument } from 'pdf-lib';
+import cors from 'cors';
 
 // Adobe PDF Services SDK imports - Make sure these are correct
 import {
@@ -32,17 +33,28 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// CORS middleware
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
+// Enhanced CORS configuration for production
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'https://pdftowordconvertor.vercel.app',
+    'https://pdftowordconvertor-*.vercel.app', // Allow preview deployments
+    /\.vercel\.app$/ // Allow all Vercel domains
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+
+// Add health check endpoint for Render
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 app.use(express.json());
