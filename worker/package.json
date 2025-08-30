@@ -1,0 +1,20 @@
+{
+  "name": "pdf-worker",
+  "version": "1.0.0",
+  "main": "src/worker.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/worker.js"
+  },
+  "dependencies": {
+    "bull": "^4.10.4",
+    "bullmq": "^5.58.0",
+    "ioredis": "^5.3.2",
+    "sharp": "^0.33.0",
+    "pdf-poppler": "^0.2.1",
+    "officegen": "^0.6.5",
+    "fluent-ffmpeg": "^2.1.2",
+    "pdf2pic": "^2.1.4"
+  }
+}
+
