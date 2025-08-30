@@ -1,73 +1,54 @@
 import { useState, useEffect } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
-
-// Use environment variable for API URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pdftoword-convertore.onrender.com';
-
-// Enhanced fetch with better error handling and CORS
-const fetchWithRetry = async (url, options = {}, retries = 3) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      console.log(`🔄 Attempt ${i + 1} - Fetching:`, url);
-      
-      const response = await fetch(url, {
-        ...options,
-        mode: 'cors',
-        credentials: 'omit', // Remove credentials for CORS
-        headers: {
-          'Accept': 'application/json',
-          ...options.headers,
-        },
-      });
-      
-      console.log(`✅ Response status: ${response.status}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      return response;
-    } catch (error) {
-      console.error(`❌ Attempt ${i + 1} failed:`, error.message);
-      
-      if (i === retries - 1) {
-        throw new Error(`Network request failed after ${retries} attempts: ${error.message}`);
-      }
-      
-      // Wait before retry with exponential backoff
-      const delay = Math.min(1000 * Math.pow(2, i), 10000);
-      console.log(`⏳ Waiting ${delay}ms before retry...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-};
+import { toast } from 'react-hot-toast';
 
 export default function Home() {
   const [file, setFile] = useState(null);
   const [type, setType] = useState('pdf-to-word');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
   const [compressionLevel, setCompressionLevel] = useState('medium');
   const [backendStatus, setBackendStatus] = useState('checking');
+  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('darkMode');
-    if (saved) {
-      setDarkMode(JSON.parse(saved));
-    }
-  }, []);
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pdftoword-convertore.onrender.com';
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  // Enhanced fetch with better error handling and CORS
+  const fetchWithRetry = async (url, options = {}, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        console.log(`🔄 Attempt ${i + 1} - Fetching:`, url);
+        
+        const response = await fetch(url, {
+          ...options,
+          mode: 'cors',
+          credentials: 'omit', // Remove credentials for CORS
+          headers: {
+            'Accept': 'application/json',
+            ...options.headers,
+          },
+        });
+        
+        console.log(`✅ Response status: ${response.status}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response;
+      } catch (error) {
+        console.error(`❌ Attempt ${i + 1} failed:`, error.message);
+        
+        if (i === retries - 1) {
+          throw new Error(`Network request failed after ${retries} attempts: ${error.message}`);
+        }
+        
+        // Wait before retry with exponential backoff
+        const delay = Math.min(1000 * Math.pow(2, i), 10000);
+        console.log(`⏳ Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
-  }, [darkMode]);
+  };
 
   const tools = [
     { 
@@ -251,7 +232,6 @@ export default function Home() {
       try {
         console.log('🔍 Checking backend health...');
         
-        // First try a simple GET request
         const response = await fetch(`${API_BASE_URL}/health`, {
           method: 'GET',
           mode: 'cors',
@@ -265,38 +245,35 @@ export default function Home() {
           const data = await response.json();
           console.log('✅ Backend healthy:', data);
           setBackendStatus('connected');
-          toast.success('Backend connected successfully!');
         } else {
           throw new Error(`Backend returned ${response.status}`);
         }
       } catch (error) {
         console.error('❌ Backend check failed:', error);
         setBackendStatus('error');
-        
-        if (error.message.includes('Failed to fetch')) {
-          toast.error('Backend server is not responding. It may be starting up...');
-        } else {
-          toast.error(`Backend connection failed: ${error.message}`);
-        }
       }
     };
     
-    // Initial check
-    checkBackend();
-    
-    // Retry every 15 seconds if failed
-    const interval = setInterval(() => {
-      if (backendStatus === 'error') {
-        console.log('🔄 Retrying backend connection...');
-        checkBackend();
-      }
-    }, 15000);
-    
-    return () => clearInterval(interval);
-  }, [backendStatus]);
+    // Only run on client side
+    if (typeof window !== 'undefined') {
+      checkBackend();
+      
+      // Retry every 15 seconds if failed
+      const interval = setInterval(() => {
+        if (backendStatus === 'error') {
+          console.log('🔄 Retrying backend connection...');
+          checkBackend();
+        }
+      }, 15000);
+      
+      return () => clearInterval(interval);
+    }
+  }, []); // Remove backendStatus from dependency array to avoid infinite loop
 
   // Add test connection function
   const testConnection = async () => {
+    if (typeof window === 'undefined') return; // Prevent SSR issues
+    
     try {
       toast.loading('Testing connection...');
       
@@ -318,6 +295,10 @@ export default function Home() {
       console.error('❌ Test failed:', error);
     }
   };
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-all duration-500">
@@ -587,42 +568,51 @@ export default function Home() {
   );
 }
 
-// Add connection status and test button in the UI
-<div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-  <div className="flex items-center justify-between">
-    <div className="flex items-center space-x-3">
-      <div className={`w-3 h-3 rounded-full ${
-        backendStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
-        backendStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'
-      }`}></div>
-      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-        Backend: {
-          backendStatus === 'connected' ? 'Connected ✅' : 
-          backendStatus === 'error' ? 'Disconnected ❌' : 'Connecting... ⏳'
-        }
-      </span>
+// Add client-side only rendering for status check
+const [mounted, setMounted] = useState(false);
+
+useEffect(() => {
+  setMounted(true);
+}, []);
+
+// Render status only after component is mounted
+{mounted && (
+  <div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center space-x-3">
+        <div className={`w-3 h-3 rounded-full ${
+          backendStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
+          backendStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'
+        }`}></div>
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          Backend: {
+            backendStatus === 'connected' ? 'Connected ✅' : 
+            backendStatus === 'error' ? 'Disconnected ❌' : 'Connecting... ⏳'
+          }
+        </span>
+      </div>
+      
+      <div className="flex space-x-2">
+        <button
+          onClick={testConnection}
+          className="px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          Test
+        </button>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-3 py-1 text-xs bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+        >
+          Refresh
+        </button>
+      </div>
     </div>
     
-    <div className="flex space-x-2">
-      <button
-        onClick={testConnection}
-        className="px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-      >
-        Test
-      </button>
-      <button
-        onClick={() => window.location.reload()}
-        className="px-3 py-1 text-xs bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-      >
-        Refresh
-      </button>
+    <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+      Server: {API_BASE_URL}
     </div>
   </div>
-  
-  <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-    Server: {API_BASE_URL}
-  </div>
-</div>
+)}}
 
 
 
