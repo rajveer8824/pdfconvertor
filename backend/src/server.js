@@ -33,76 +33,28 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// More permissive CORS configuration
+// Enhanced CORS configuration for production
 const corsOptions = {
-  origin: true, // Allow all origins for now
-  credentials: false, // Disable credentials to avoid CORS issues
+  origin: [
+    'http://localhost:3000',
+    'https://pdftowordconvertor.vercel.app',
+    'https://pdftowordconvertor-*.vercel.app', // Allow preview deployments
+    /\.vercel\.app$/ // Allow all Vercel domains
+  ],
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  optionsSuccessStatus: 200,
-  preflightContinue: false
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(cors(corsOptions));
 
-// Handle preflight requests explicitly
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Accept, Origin');
-  res.sendStatus(200);
-});
-
-// Add middleware to set CORS headers on all responses
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Accept, Origin');
-  
-  console.log(`📝 ${req.method} ${req.path} from ${req.get('origin') || req.get('host') || 'unknown'}`);
-  next();
-});
-
-// Enhanced health check
+// Add health check endpoint for Render
 app.get('/health', (req, res) => {
-  console.log('🏥 Health check from:', req.get('origin') || req.get('host'));
-  
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    message: 'PDF Converter Backend is running',
-    version: '1.0.0',
-    cors: 'enabled'
+    uptime: process.uptime()
   });
-});
-
-// Test endpoint for CORS
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    message: 'CORS test successful',
-    origin: req.get('origin'),
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Add root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    message: 'PDF Converter API is running',
-    endpoints: {
-      health: '/health',
-      convert: '/api/convert',
-      download: '/api/download/:filename',
-      status: '/api/status/:filename'
-    }
-  });
-});
-
-// Add request logging
-app.use((req, res, next) => {
-  console.log(`📝 ${req.method} ${req.path} from ${req.get('origin') || 'unknown'}`);
-  next();
 });
 
 app.use(express.json());
@@ -982,8 +934,8 @@ async function compressPdfAdobe(inputPath, outputPath, compressionLevel) {
     return false;
   }
 }
-
-app.listen(3001, () => {
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
   console.log("✅ Backend running on port 3001");
   console.log("🔧 Available endpoints:");
   console.log("   POST /api/convert - File conversion");
