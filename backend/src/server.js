@@ -34,17 +34,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Enhanced CORS configuration for production
-const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'https://pdftowordconvertor.vercel.app',
-    'https://pdftowordconvertor-*.vercel.app', // Allow preview deployments
-    /\.vercel\.app$/ // Allow all Vercel domains
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-};
+app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }));
+
 
 app.use(cors(corsOptions));
 
