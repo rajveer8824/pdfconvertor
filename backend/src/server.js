@@ -11,17 +11,17 @@ import { fileURLToPath } from 'url';
 import { PDFDocument } from 'pdf-lib';
 import cors from 'cors';
 
-// Adobe PDF Services SDK imports - Make sure these are correct
+// Adobe PDF Services SDK imports
 import {
   PDFServices,
   MimeType,
   ExportPDFJob,
   ExportPDFParams,
   ExportPDFTargetFormat,
-  ExportPDFResult,        // This is the correct result type for PDF export
+  ExportPDFResult,
   CompressPDFJob,
   CompressPDFParams,
-  CompressPDFResult,      // This is the correct result type for PDF compression
+  CompressPDFResult,
   CompressionLevel,
   SDKError,
   ServicePrincipalCredentials,
@@ -33,9 +33,18 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Enhanced CORS configuration for production
-app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }));
-
+// CORS configuration - FIXED: Added proper CORS options
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'https://pdftowordconvertor.vercel.app',
+    'https://pdftowordconvertor-*.vercel.app',
+    /\.vercel\.app$/
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
 
 app.use(cors(corsOptions));
 
@@ -925,22 +934,24 @@ async function compressPdfAdobe(inputPath, outputPath, compressionLevel) {
     return false;
   }
 }
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log("✅ Backend running on port 3001");
-  console.log("🔧 Available endpoints:");
-  console.log("   POST /api/convert - File conversion");
-  console.log("   GET /api/download/:filename - File download");
-  console.log("   GET /api/status/:filename - Check conversion status");
-  console.log("   GET /api/adobe-status - Check Adobe PDF Services configuration");
-  console.log("\n📝 PDF to Word Conversion Options:");
-  console.log("   1. Adobe PDF Services (best) - Requires credentials file");
-  console.log("   2. Enhanced text extraction (fallback) - Works with any PDF");
-  console.log("\n📋 To set up Adobe PDF Services:");
-  console.log("   1. Go to https://developer.adobe.com/document-services/");
-  console.log("   2. Create credentials and download pdfservices-api-credentials.json");
-  console.log("   3. Place the file in the root directory of this project");
-});
+
+// ADDED: Missing compressPdfFallback function
+async function compressPdfFallback(file, timestamp, compressionLevel) {
+  const outputPath = `outputs/${timestamp}_compressed.pdf`;
+  
+  try {
+    console.log("🔄 Using fallback PDF compression (file copy)...");
+    
+    // Simple file copy as fallback - in a real implementation you would use a PDF library
+    fs.copyFileSync(file.path, outputPath);
+    
+    console.log(`✅ PDF file copied: ${outputPath}`);
+    return outputPath;
+    
+  } catch (error) {
+    throw new Error(`PDF fallback processing failed: ${error.message}`);
+  }
+}
 
 // Enhanced Adobe credentials loading with validation
 function getAdobeCredentials() {
@@ -986,16 +997,24 @@ function getAdobeCredentials() {
   }
 }
 
-// Add Adobe status check endpoint
-app.get('/api/adobe-status', (req, res) => {
-  const credentials = getAdobeCredentials();
-  
+// Add compression options endpoint
+app.get('/api/compression-options', (req, res) => {
   res.json({
-    configured: !!credentials,
-    message: credentials ? 
-      "Adobe PDF Services is properly configured" : 
-      "Adobe PDF Services credentials not found",
-    setup_url: "https://developer.adobe.com/document-services/"
+    image: {
+      low: { quality: 50, resolution: '1280x720', description: 'Low quality - Smallest file size' },
+      medium: { quality: 75, resolution: '1920x1080', description: 'Medium quality - Balanced size and quality' },
+      high: { quality: 90, resolution: '2560x1440', description: 'High quality - Best quality with some compression' }
+    },
+    video: {
+      low: { resolution: '480p', bitrate: '500k', description: 'Low quality - Smallest file size (480p)' },
+      medium: { resolution: '720p', bitrate: '1000k', description: 'Medium quality - Balanced size and quality (720p)' },
+      high: { resolution: '1080p', bitrate: '2000k', description: 'High quality - Best quality with compression (1080p)' }
+    },
+    pdf: {
+      low: { description: 'Low compression - Best quality, larger file size' },
+      medium: { description: 'Medium compression - Balanced quality and size' },
+      high: { description: 'High compression - Smallest file size, reduced quality' }
+    }
   });
 });
 
@@ -1077,23 +1096,22 @@ async function extractPdfText(pdfPath) {
   });
 }
 
-// Add compression options endpoint
-app.get('/api/compression-options', (req, res) => {
-  res.json({
-    image: {
-      low: { quality: 50, resolution: '1280x720', description: 'Low quality - Smallest file size' },
-      medium: { quality: 75, resolution: '1920x1080', description: 'Medium quality - Balanced size and quality' },
-      high: { quality: 90, resolution: '2560x1440', description: 'High quality - Best quality with some compression' }
-    },
-    video: {
-      low: { resolution: '480p', bitrate: '500k', description: 'Low quality - Smallest file size (480p)' },
-      medium: { resolution: '720p', bitrate: '1000k', description: 'Medium quality - Balanced size and quality (720p)' },
-      high: { resolution: '1080p', bitrate: '2000k', description: 'High quality - Best quality with compression (1080p)' }
-    },
-    pdf: {
-      low: { description: 'Low compression - Best quality, larger file size' },
-      medium: { description: 'Medium compression - Balanced quality and size' },
-      high: { description: 'High compression - Smallest file size, reduced quality' }
-    }
-  });
+// Use PORT from environment variable or default to 3001
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`✅ Backend running on port ${PORT}`);
+  console.log("🔧 Available endpoints:");
+  console.log("   POST /api/convert - File conversion");
+  console.log("   GET /api/download/:filename - File download");
+  console.log("   GET /api/status/:filename - Check conversion status");
+  console.log("   GET /api/adobe-status - Check Adobe PDF Services configuration");
+  console.log("   GET /api/compression-options - Get compression options");
+  console.log("   GET /health - Health check endpoint");
+  console.log("\n📝 PDF to Word Conversion Options:");
+  console.log("   1. Adobe PDF Services (best) - Requires credentials file");
+  console.log("   2. Enhanced text extraction (fallback) - Works with any PDF");
+  console.log("\n📋 To set up Adobe PDF Services:");
+  console.log("   1. Go to https://developer.adobe.com/document-services/");
+  console.log("   2. Create credentials and download pdfservices-api-credentials.json");
+  console.log("   3. Place the file in the root directory of this project");
 });
