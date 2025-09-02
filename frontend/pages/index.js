@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-
-// Use environment variable for API URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pdftoword-convertore.onrender.com';
+import { getApiBaseUrl } from '../lib/config'; // Import the config function
 
 export default function Home() {
+  // Use the config function to get the API URL
+  const API_BASE_URL = getApiBaseUrl();
+  
   const [file, setFile] = useState(null);
   const [type, setType] = useState('pdf-to-word');
   const [loading, setLoading] = useState(false);
@@ -198,7 +199,7 @@ export default function Home() {
     };
     
     checkBackend();
-  }, []);
+  }, [API_BASE_URL]); // Add API_BASE_URL as dependency
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-all duration-500">
